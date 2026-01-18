@@ -40,6 +40,7 @@ Server is running at `http://127.0.0.1:8000`
 
 - POST `/api/evaluate/start`: submits a multipart job (`target`, `context`, optional `metadata`, `transcript`, `deck`, `media`). Jobs are persisted under `.data/jobs`/`.data/uploads`, agent results land in `.data/results`, and the workflow runs Gemini + ElevenLabs agents in the background.
 - GET `/api/evaluate/status/{jobId}`: returns the stored job payload plus the multi-agent report once processing completes.
+   - The saved report now includes `audioAnalysis`, `agentWarnings`, `combineWarnings`, `summaryAdjustments`, and `meta.graphOrder` so clients can surface execution warnings, LangGraph order, and audio-specific insights.
 
 ### Environment configuration
 

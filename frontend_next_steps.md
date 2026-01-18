@@ -23,6 +23,17 @@ Backend is now running separately under `pitch-perfect-server`. It exposes the l
 
 5. **Error handling & UX** – handle CORS, file-type validation (backend already enforces allowed audio/PDF types), and display meaningful errors coming from `/api/evaluate/start` or `/api/evaluate/status/{jobId}`.
 
+## Additional result details
+
+The backend now attaches these fields in every `result` payload:
+
+- `audioAnalysis`: summary text (`summary`), structured insights (`analysis`), and the raw Gemini response (`raw`), giving you the low-level audio cues to surface.
+- `agentWarnings` and `combineWarnings`: explain malformed/missing agent fields, timeline/recommendation truncation, or action-count issues that may require UI flags.
+- `summaryAdjustments`: captures penalties (which agents scored below 60, how many points were deducted, and the adjusted combine score).
+- `meta.graphOrder`: the LangGraph execution order so you can map backend nodes (deck→text→audio→...) to your frontend loading states.
+
+Use these to annotate the structured feedback view (e.g., highlight penalized summaries, show trimmed timelines, or warn when audio was text-only).
+
 
 ## Notes
 - Backend still exposes `/analyze` and `/analyze-pdf` for immediate single-file summarization; keep those available or map them to “quick analyze” buttons if needed.

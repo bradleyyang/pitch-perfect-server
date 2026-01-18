@@ -1,17 +1,18 @@
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Callable, Dict, List
 
 from app.analysis import (
     speech_to_text,
-    summarize_speech_with_gemini,
     extract_pdf_text,
     summarize_pdf_with_gemini,
     gemini_client,
 )
-from app import job_store
 from app.agent_schemas import validate_agent_output
+from app.gemini_audio import analyze_audio_with_gemini
+from app.lang_graph import LangGraphNode, LangGraphRunner
+from app import job_store
 
 PROMPT_DIR = Path(__file__).resolve().parent / "prompts"
 PROMPT_FILES = {
@@ -23,7 +24,14 @@ PROMPT_FILES = {
     "transcription": "transcription-agent.txt",
     "combine": "combine-agent.txt",
 }
-AGENT_SEQUENCE = ["deck", "text", "speech_content", "audio", "voice", "transcription"]
+AGENT_DEPENDENCIES = {
+    "deck": [],
+    "text": [],
+    "speech_content": [],
+    "audio": [],
+    "voice": [],
+    "transcription": [],
+}
 
 
 def _load_prompt(agent_name: str) -> str:
@@ -68,6 +76,7 @@ def _make_prompt_vars(agent_name: str, context_data: Dict[str, Any]) -> Dict[str
     base = {
         "context": context_data["context"],
         "target": context_data["target"],
+        "metadata": context_data["metadata"],
     }
     if agent_name in ("text", "speech_content", "audio", "voice", "transcription"):
         base["transcript"] = context_data["transcript"]
@@ -76,6 +85,33 @@ def _make_prompt_vars(agent_name: str, context_data: Dict[str, Any]) -> Dict[str
     if agent_name in ("audio", "voice", "transcription"):
         base["audio_summary"] = context_data["audio_summary"]
     return base
+
+
+def _make_agent_compute(agent_name: str) -> Callable[[Dict[str, Any]], Dict[str, Any]]:
+    def compute(state: Dict[str, Any]) -> Dict[str, Any]:
+        prompt_vars = _make_prompt_vars(agent_name, state)
+        return _call_agent(agent_name, prompt_vars)
+
+    return compute
+
+
+def _make_combine_compute() -> callable:
+    def compute(state: Dict[str, Any]) -> Dict[str, Any]:
+        agents_json = json.dumps(
+            {name: data for name, data in state["agents"].items() if name != "combine"},
+            indent=2,
+        )
+        prompt_vars = {
+            "context": state["context"],
+            "target": state["target"],
+            "metadata": state["metadata"],
+            "deck_summary": state["deck_summary"],
+            "audio_summary": state["audio_summary"],
+            "agents_json": agents_json,
+        }
+        return _call_agent("combine", prompt_vars)
+
+    return compute
 
 
 def execute_agent_workflow(job_payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -102,7 +138,21 @@ def execute_agent_workflow(job_payload: Dict[str, Any]) -> Dict[str, Any]:
     else:
         raise RuntimeError("No transcript or media available to evaluate.")
 
-    audio_summary = summarize_speech_with_gemini(transcription_result, audio_source_name)
+    audio_analysis: Dict[str, Any]
+    if media_info and media_info.get("path"):
+        audio_analysis = analyze_audio_with_gemini(
+            media_info["path"],
+            transcription_result,
+            audio_source_name,
+            metadata,
+        )
+    else:
+        audio_analysis = {
+            "summary": "Transcript-only evaluation (raw audio unavailable).",
+            "analysis": {},
+            "raw": "",
+        }
+    audio_summary = audio_analysis.get("summary", "No summary available.")
 
     deck_info = job_payload.get("deck")
     deck_summary = "No deck uploaded."
@@ -119,44 +169,51 @@ def execute_agent_workflow(job_payload: Dict[str, Any]) -> Dict[str, Any]:
         deck_text = "\n\n".join(deck_text_fragments) or "Deck slides had no text."
         deck_summary = summarize_pdf_with_gemini(extracted, deck_info.get("filename") or target)
 
-    base_context = {
+    metadata_str = json.dumps(metadata, indent=2)
+    state: Dict[str, Any] = {
         "context": context,
         "target": target,
-        "metadata": json.dumps(metadata, indent=2),
+        "metadata": metadata_str,
         "transcript": transcription_result["transcription"],
         "deck_text": deck_text,
         "deck_summary": deck_summary,
         "audio_summary": audio_summary,
+        "audio_analysis": audio_analysis,
+        "agents": {},
+        "agent_raw": {},
+        "agent_warnings": {},
     }
 
-    agent_outputs: Dict[str, Dict[str, Any]] = {}
-    for agent_name in AGENT_SEQUENCE:
-        prompt_vars = _make_prompt_vars(agent_name, base_context)
-        agent_outputs[agent_name] = _call_agent(agent_name, prompt_vars)
+    graph = LangGraphRunner()
+    for agent_name, dependencies in AGENT_DEPENDENCIES.items():
+        graph.register(
+            LangGraphNode(
+                name=agent_name,
+                compute=_make_agent_compute(agent_name),
+                dependencies=dependencies,
+            )
+        )
 
-    combined_agents = {agent: data["parsed"] for agent, data in agent_outputs.items()}
-    agent_warnings = {
-        agent: data["warnings"]
-        for agent, data in agent_outputs.items()
-        if data.get("warnings")
-    }
-    combine_vars = {
-        "context": context,
-        "target": target,
-        "metadata": base_context["metadata"],
-        "deck_summary": deck_summary,
-        "audio_summary": audio_summary,
-        "agents_json": json.dumps(combined_agents, indent=2),
-    }
-    combine_output = _call_agent("combine", combine_vars)
-    combine_data = combine_output["parsed"]
-    combine_warnings = list(combine_output.get("warnings", []))
+    graph.register(
+        LangGraphNode(
+            name="combine",
+            compute=_make_combine_compute(),
+            dependencies=list(AGENT_DEPENDENCIES.keys()),
+        )
+    )
+
+    graph_order = graph.run(state)
+    combined_agents = state["agents"]
+    agent_warnings = state["agent_warnings"]
+    combine_data = combined_agents["combine"]
+    combine_warnings: List[str] = agent_warnings.get("combine", []).copy()
+    combine_raw = state["agent_raw"].get("combine", "")
     summary_adjustments: List[Dict[str, Any]] = []
 
     low_agents: List[Dict[str, Any]] = []
     for agent_name, agent_data in combined_agents.items():
         overall = agent_data.get("overallScore")
-        if isinstance(overall, (int, float)) and overall < 60:
+        if isinstance(overall, (int, float)) and overall < 60 and agent_name != "combine":
             low_agents.append({"agent": agent_name, "score": overall})
 
     if low_agents:
@@ -184,7 +241,9 @@ def execute_agent_workflow(job_payload: Dict[str, Any]) -> Dict[str, Any]:
 
     recommendations = combine_data.get("recommendations", [])
     if len(recommendations) < 6:
-        combine_warnings.append(f"Recommendations list has {len(recommendations)} entries (expected 6-8).")
+        combine_warnings.append(
+            f"Recommendations list has {len(recommendations)} entries (expected 6-8)."
+        )
     elif len(recommendations) > 8:
         combine_data["recommendations"] = recommendations[:8]
         combine_warnings.append("Recommendations trimmed to 8 entries.")
@@ -203,6 +262,7 @@ def execute_agent_workflow(job_payload: Dict[str, Any]) -> Dict[str, Any]:
             "metadata": metadata,
             "model": "gemini-2.0-flash",
             "created_at": datetime.utcnow().isoformat() + "Z",
+            "graphOrder": graph_order,
         },
         "transcript": {
             "text": transcription_result["transcription"],
@@ -212,16 +272,17 @@ def execute_agent_workflow(job_payload: Dict[str, Any]) -> Dict[str, Any]:
             "loudness": transcription_result.get("loudness", []),
         },
         "audio_summary": audio_summary,
+        "audio_analysis": audio_analysis,
         "deck": {
             "summary": deck_summary,
             "pages": deck_pages,
             "text": deck_text,
         },
-        "agents": {name: data["parsed"] for name, data in agent_outputs.items()},
+        "agents": combined_agents,
         "agentWarnings": agent_warnings,
-        "agentRaw": {name: data["raw"] for name, data in agent_outputs.items()},
+        "agentRaw": state["agent_raw"],
         "combine": combine_data,
-        "combineRaw": combine_output["raw"],
+        "combineRaw": combine_raw,
         "combineWarnings": combine_warnings,
         "summaryAdjustments": summary_adjustments,
     }
