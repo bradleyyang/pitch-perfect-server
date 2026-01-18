@@ -58,6 +58,12 @@ def _parse_json_response(text: str) -> Any:
                 return json.loads(cleaned[start : end + 1])
             except json.JSONDecodeError:
                 pass
+        if ":" in cleaned and not cleaned.strip().startswith("{"):
+            candidate = "{" + cleaned.strip().rstrip(",") + "}"
+            try:
+                return json.loads(candidate)
+            except json.JSONDecodeError:
+                pass
     return {
         "raw_text": cleaned,
         "parse_error": f"Unable to parse JSON from agent response ({exc}).",
