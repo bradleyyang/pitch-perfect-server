@@ -13,7 +13,7 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "https://pitch-perfect-ebon.vercel.app"],
+    allow_origins=["http://localhost:3000", "https://pitch-perfect-cg8p3t7pt-bradley-yangs-projects.vercel.app"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
