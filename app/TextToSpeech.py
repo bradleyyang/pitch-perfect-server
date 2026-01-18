@@ -1,3 +1,4 @@
+import base64
 from dotenv import load_dotenv
 import os
 from dotenv import load_dotenv
@@ -23,10 +24,10 @@ def createVoice(pathToAudio):
     return voice.voice_id
 
 
-def TextToSpeech(text, voice_id="uju3wxzG5OhpWcoi3SMy"):
+def TextToSpeech(text, voice_id = 'Mu5jxyqZOLIGltFpfalg'):
     # Calling the text_to_speech conversion API with detailed parameters
-    response = elevenlabs.text_to_speech.convert( 
-        voice_id=voice_id,
+    response = elevenlabs.text_to_speech.convert(
+        voice_id= voice_id, # Can be changed with the 11 labs voice library
         output_format="mp3_22050_32",
         text=text,
         model_id="eleven_turbo_v2_5", # use the turbo model for low latency
@@ -39,12 +40,14 @@ def TextToSpeech(text, voice_id="uju3wxzG5OhpWcoi3SMy"):
             speed=1.0,
         ),
     )
-    save_file_path = f"{uuid.uuid4()}.mp3"
-
-    with open(save_file_path, "wb") as f:
-        for chunk in response:
-            if chunk:
-                f.write(chunk)
-    print(f"{save_file_path}: A new audio file was saved successfully!")
-
-    return save_file_path
+    
+    # Collect all audio chunks into a bytes object
+    audio_data = b""
+    for chunk in response:
+        if chunk:
+            audio_data += chunk
+    
+    # Convert to base64 string
+    base64_string = base64.b64encode(audio_data).decode('utf-8')
+    
+    return base64_string
