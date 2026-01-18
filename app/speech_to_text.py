@@ -5,10 +5,30 @@ from elevenlabs.client import ElevenLabs
 from elevenlabs import VoiceSettings
 import uuid
 import syllables  
+import librosa
+import numpy as np
 
 load_dotenv()
 
 elevenlabs = ElevenLabs(api_key=os.getenv("ELEVENLABS_API_KEY"))
+
+def track_loudness_deviation(audioPath, frame_length=512, hop_length=256):
+    # Load audio
+    y, sr = librosa.load(audioPath, sr=None)
+
+    rms = librosa.feature.rms(y=y, frame_length=frame_length, hop_length=hop_length)[0]
+    rms_db = librosa.amplitude_to_db(rms, ref=np.max) # Convert to dB for better visualization
+
+    # Get time axis for plotting
+    times = librosa.times_like(rms_db, sr=sr, hop_length=hop_length)
+
+    result = []
+
+    for time,db in zip(times,rms_db):
+        result.append([float(time),float(db)])
+
+
+    return result
 
 def get_most_frequent_speed(analysisWords):
     speed_counts = {}
@@ -22,7 +42,6 @@ def get_most_frequent_speed(analysisWords):
     
     most_frequent_speed = max(speed_counts, key=speed_counts.get)
     return most_frequent_speed
-
 
 def speechToText(audioSource):
     with open(audioSource, "rb") as audioData:
@@ -86,9 +105,11 @@ def speechToText(audioSource):
         
         analysisWords.append(analysis)
     
+    dbGraph = track_loudness_deviation()
     return {"Transcription": transcription.text,
             "Word Analysis": analysisWords,
-            "Timestamps": timeStamps
+            "Timestamps": timeStamps,
+            "Loudness": dbGraph
             }
 
 
@@ -119,6 +140,3 @@ def text_to_speech_file(text):
 
     return save_file_path
 
-
-
-print(speechToText("SpeechTest1.mp4"))
