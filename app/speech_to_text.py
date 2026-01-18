@@ -2,8 +2,6 @@ from dotenv import load_dotenv
 import os
 import requests
 from elevenlabs.client import ElevenLabs
-from elevenlabs import VoiceSettings
-import uuid
 import syllables  
 import librosa
 import numpy as np
@@ -23,7 +21,6 @@ def track_loudness_deviation(audioPath, frame_length=512, hop_length=256):
     times = librosa.times_like(rms_db, sr=sr, hop_length=hop_length)
 
     result = []
-
     for time,db in zip(times,rms_db):
         result.append([float(time),float(db)])
 
@@ -49,6 +46,8 @@ def speechToText(audioSource):
             file=audioData,
             model_id="scribe_v2",
         )
+
+    
     
     # The transcription object contains both text and word-level timestamps
     result = {
@@ -114,29 +113,4 @@ def speechToText(audioSource):
 
 
 
-def text_to_speech_file(text):
-    # Calling the text_to_speech conversion API with detailed parameters
-    response = elevenlabs.text_to_speech.convert(
-        voice_id="Mu5jxyqZOLIGltFpfalg", # Can be changed with the 11 labs voice library
-        output_format="mp3_22050_32",
-        text=text,
-        model_id="eleven_turbo_v2_5", # use the turbo model for low latency
-        # Optional voice settings that allow you to customize the output
-        voice_settings=VoiceSettings(
-            stability=0.0,
-            similarity_boost=1.0,
-            style=0.0,
-            use_speaker_boost=True,
-            speed=1.0,
-        ),
-    )
-    save_file_path = f"{uuid.uuid4()}.mp3"
-
-    with open(save_file_path, "wb") as f:
-        for chunk in response:
-            if chunk:
-                f.write(chunk)
-    print(f"{save_file_path}: A new audio file was saved successfully!")
-
-    return save_file_path
 
