@@ -1,12 +1,15 @@
-import os
 import json
+import os
 import syllables
 import librosa
 import numpy as np
 from dotenv import load_dotenv
 from elevenlabs.client import ElevenLabs
+from elevenlabs.core.api_error import ApiError
 from google import genai
 import fitz  # PyMuPDF for PDF processing
+
+from app.gemini_transcription import gemini_transcribe_audio
 
 load_dotenv()
 elevenlabs = ElevenLabs(api_key=os.getenv("ELEVENLABS_API_KEY"))
@@ -18,47 +21,60 @@ FAST_SPM = 400
 
 
 def speech_to_text(audio_path: str):
-    with open(audio_path, "rb") as audio_data:
-        transcription = elevenlabs.speech_to_text.convert(
-            file=audio_data,
-            model_id="scribe_v2",
-        )
-
+    transcription_text = ""
     analysis_words = []
     timestamps = []
+    source = "elevenlabs"
 
-    for word in getattr(transcription, "words", []):
-        duration = word.end - word.start
-        if duration <= 0 or not word.text.strip():
-            continue
+    try:
+        with open(audio_path, "rb") as audio_data:
+            transcription = elevenlabs.speech_to_text.convert(
+                file=audio_data,
+                model_id="scribe_v2",
+            )
 
-        syllable_count = syllables.estimate(word.text) or 1
-        spm = (syllable_count / duration) * 60
+        for word in getattr(transcription, "words", []):
+            duration = word.end - word.start
+            if duration <= 0 or not word.text.strip():
+                continue
 
-        if spm < SLOW_SPM:
-            speed = "Too Slow"
-        elif spm <= IDEAL_SPM:
-            speed = "Ideal"
-        elif spm <= FAST_SPM:
-            speed = "Fast"
-        else:
-            speed = "Too Fast"
+            syllable_count = syllables.estimate(word.text) or 1
+            spm = (syllable_count / duration) * 60
 
-        analysis_words.append({
-            "word": word.text,
-            "speed": speed,
-            "syllables_per_minute": round(spm, 2)
-        })
+            if spm < SLOW_SPM:
+                speed = "Too Slow"
+            elif spm <= IDEAL_SPM:
+                speed = "Ideal"
+            elif spm <= FAST_SPM:
+                speed = "Fast"
+            else:
+                speed = "Too Fast"
 
-        timestamps.append([word.end, round(spm, 2)])
+            analysis_words.append({
+                "word": word.text,
+                "speed": speed,
+                "syllables_per_minute": round(spm, 2)
+            })
+
+            timestamps.append([word.end, round(spm, 2)])
+
+        transcription_text = transcription.text
+    except ApiError:
+        source = "gemini"
+        fallback = gemini_transcribe_audio(
+            audio_path,
+            metadata={"filename": os.path.basename(audio_path)},
+        )
+        transcription_text = fallback["transcription"]
 
     loudness = track_loudness_deviation(audio_path)
 
     return {
-        "transcription": transcription.text,
+        "transcription": transcription_text,
         "word_analysis": analysis_words,
         "timestamps": timestamps,
-        "loudness": loudness
+        "loudness": loudness,
+        "source": source,
     }
 
 

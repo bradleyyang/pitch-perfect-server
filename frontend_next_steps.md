@@ -30,6 +30,9 @@ The backend now attaches these fields in every `result` payload:
 - `audioAnalysis`: summary text (`summary`), structured insights (`analysis`), and the raw Gemini response (`raw`), giving you the low-level audio cues to surface.
 - `agentWarnings` and `combineWarnings`: explain malformed/missing agent fields, timeline/recommendation truncation, or action-count issues that may require UI flags.
 - `summaryAdjustments`: captures penalties (which agents scored below 60, how many points were deducted, and the adjusted combine score).
+- Use `summaryAdjustments` to explain why the combine score may be lower than a spectacular agent; it enforces the backend’s weighted scoring heuristics.
+- `transcript.source`: one of `user`, `elevenlabs`, or `gemini`, so the UI can label where a transcript came from and surface a fallback notice when Gemini transcribed.
+- `summaryAdjustments`: captures penalties (which agents scored below 60, how many points were deducted, and the adjusted combine score).
 - `meta.graphOrder`: the LangGraph execution order so you can map backend nodes (deck→text→audio→...) to your frontend loading states.
 
 Use these to annotate the structured feedback view (e.g., highlight penalized summaries, show trimmed timelines, or warn when audio was text-only).

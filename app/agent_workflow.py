@@ -12,6 +12,7 @@ from app.analysis import (
 from app.agent_schemas import validate_agent_output
 from app.gemini_audio import analyze_audio_with_gemini
 from app.lang_graph import LangGraphNode, LangGraphRunner
+from app.scoring_rules import apply_scoring_rules
 from app import job_store
 
 PROMPT_DIR = Path(__file__).resolve().parent / "prompts"
@@ -95,7 +96,7 @@ def _make_agent_compute(agent_name: str) -> Callable[[Dict[str, Any]], Dict[str,
     return compute
 
 
-def _make_combine_compute() -> callable:
+def _make_combine_compute() -> Callable[[Dict[str, Any]], Dict[str, Any]]:
     def compute(state: Dict[str, Any]) -> Dict[str, Any]:
         agents_json = json.dumps(
             {name: data for name, data in state["agents"].items() if name != "combine"},
@@ -121,6 +122,7 @@ def execute_agent_workflow(job_payload: Dict[str, Any]) -> Dict[str, Any]:
 
     transcript_text = job_payload.get("transcript")
     media_info = job_payload.get("media")
+    provided_source = job_payload.get("transcript_source")
 
     audio_source_name = target
     transcription_result: Dict[str, Any]
@@ -131,6 +133,7 @@ def execute_agent_workflow(job_payload: Dict[str, Any]) -> Dict[str, Any]:
             "word_analysis": [],
             "timestamps": [],
             "loudness": [],
+            "source": provided_source or "user",
         }
     elif media_info and media_info.get("path"):
         transcription_result = speech_to_text(media_info["path"])
@@ -138,7 +141,6 @@ def execute_agent_workflow(job_payload: Dict[str, Any]) -> Dict[str, Any]:
     else:
         raise RuntimeError("No transcript or media available to evaluate.")
 
-    audio_analysis: Dict[str, Any]
     if media_info and media_info.get("path"):
         audio_analysis = analyze_audio_with_gemini(
             media_info["path"],
@@ -210,27 +212,15 @@ def execute_agent_workflow(job_payload: Dict[str, Any]) -> Dict[str, Any]:
     combine_raw = state["agent_raw"].get("combine", "")
     summary_adjustments: List[Dict[str, Any]] = []
 
-    low_agents: List[Dict[str, Any]] = []
+    agent_scores: Dict[str, int] = {}
     for agent_name, agent_data in combined_agents.items():
+        if agent_name == "combine":
+            continue
         overall = agent_data.get("overallScore")
-        if isinstance(overall, (int, float)) and overall < 60 and agent_name != "combine":
-            low_agents.append({"agent": agent_name, "score": overall})
+        if isinstance(overall, (int, float)):
+            agent_scores[agent_name] = int(round(overall))
 
-    if low_agents:
-        penalty = min(15, 5 * len(low_agents))
-        original_score = combine_data["summary"]["overallScore"]
-        adjusted_score = max(1, original_score - penalty)
-        combine_data["summary"]["overallScore"] = adjusted_score
-        summary_adjustments.append(
-            {
-                "penalty": penalty,
-                "lowAgents": low_agents,
-                "finalScore": adjusted_score,
-            }
-        )
-        combine_warnings.append(
-            f"Summary penalized {penalty} pts because {len(low_agents)} agents scored below 60."
-        )
+    apply_scoring_rules(combine_data["summary"], agent_scores, combine_warnings, summary_adjustments)
 
     timeline = combine_data.get("timeline", [])
     if len(timeline) < 6:
@@ -266,7 +256,7 @@ def execute_agent_workflow(job_payload: Dict[str, Any]) -> Dict[str, Any]:
         },
         "transcript": {
             "text": transcription_result["transcription"],
-            "source": "user" if transcript_text else "elevenlabs",
+            "source": transcription_result.get("source", "user"),
             "word_analysis": transcription_result.get("word_analysis", []),
             "timestamps": transcription_result.get("timestamps", []),
             "loudness": transcription_result.get("loudness", []),

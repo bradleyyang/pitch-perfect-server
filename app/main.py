@@ -132,6 +132,7 @@ async def start_evaluation(
         "context": context,
         "metadata": parsed_metadata,
         "transcript": transcript,
+        "transcript_source": "user" if transcript else None,
         "deck": deck_info,
         "media": media_info,
     }
