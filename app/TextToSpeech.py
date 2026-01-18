@@ -23,7 +23,7 @@ def createVoice(pathToAudio):
     return voice.voice_id
 
 
-def TextToSpeech(text, voice_id="Mu5jxyqZOLIGltFpfalg"):
+def TextToSpeech(text, voice_id="uju3wxzG5OhpWcoi3SMy"):
     # Calling the text_to_speech conversion API with detailed parameters
     response = elevenlabs.text_to_speech.convert( 
         voice_id=voice_id,
