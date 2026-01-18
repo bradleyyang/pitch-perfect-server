@@ -50,7 +50,7 @@ def _parse_json_response(text: str) -> Any:
 
     try:
         return json.loads(cleaned)
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as exc:
         start = cleaned.find("{")
         end = cleaned.rfind("}")
         if start != -1 and end != -1:
@@ -58,7 +58,10 @@ def _parse_json_response(text: str) -> Any:
                 return json.loads(cleaned[start : end + 1])
             except json.JSONDecodeError:
                 pass
-    return {"raw_text": cleaned, "parse_error": "Unable to parse JSON from agent response."}
+    return {
+        "raw_text": cleaned,
+        "parse_error": f"Unable to parse JSON from agent response ({exc}).",
+    }
 
 
 def _call_agent(agent_name: str, prompt_vars: Dict[str, Any]) -> Dict[str, Any]:
@@ -69,11 +72,14 @@ def _call_agent(agent_name: str, prompt_vars: Dict[str, Any]) -> Dict[str, Any]:
         contents=prompt_text,
     )
     parsed = _parse_json_response(response.text)
+    parsed_warnings: List[str] = []
     if not isinstance(parsed, dict):
         parsed = {"raw_text": str(parsed)}
-        parsed_warnings = ["Agent returned non-dict response"]
-    else:
-        parsed_warnings = []
+        parsed_warnings.append("Agent returned non-dict response")
+    elif "parse_error" in parsed:
+        parsed_warnings.append(
+            f"JSON parse error: {parsed['parse_error']} | sample: {parsed['raw_text'][:200]}"
+        )
     validated, warnings = validate_agent_output(agent_name, parsed)
     warnings = parsed_warnings + warnings
     return {"parsed": validated, "raw": response.text.strip(), "warnings": warnings}
