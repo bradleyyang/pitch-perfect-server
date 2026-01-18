@@ -127,6 +127,12 @@ async def start_evaluation(
         media_bytes = await media.read()
         media_info = persist_upload(job_id, media.filename, media_bytes, media.content_type)
 
+    if not any([deck_info, media_info, transcript]):
+        raise HTTPException(
+            status_code=400,
+            detail="At least one of `deck`, `media`, or `transcript` must be provided.",
+        )
+
     job_payload = {
         "target": target,
         "context": context,

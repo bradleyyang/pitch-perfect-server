@@ -12,6 +12,8 @@ Backend is now running separately under `pitch-perfect-server`. It exposes the l
 1. **Job submission UI** – either reuse existing upload form or add a dedicated workflow form. When the user submits target/context/metadata/audio/deck:
    - Build `FormData` with those fields and POST to `/api/evaluate/start`.
    - Display the returned `jobId`/`statusUrl` immediately so the user knows the job is queued.
+   - Allow the user to either upload an audio/media file or record audio directly inside the UI (use the Web Audio/MediaRecorder APIs). The backend only needs one input stream, so whichever you capture, attach the resulting audio blob to `media`.
+   - Enforce that at least one of `deck`, `media`, or a free-form `transcript` is provided before submission; surface a validation error otherwise so the backend never rejects the call.
 
 2. **Status polling/updates** – after submission, poll `/api/evaluate/status/{jobId}` (every few seconds or via WebSocket if you prefer) until a `result` object appears:
    - Show job status from `job.status` (`pending`, `running`, `completed`, `failed`) and any `error`.
