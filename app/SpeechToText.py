@@ -1,14 +1,25 @@
+from io import BytesIO
 from dotenv import load_dotenv
 import os
 import requests
 from elevenlabs.client import ElevenLabs
+from elevenlabs import VoiceSettings
+import uuid
 import syllables  
 import librosa
 import numpy as np
-
 load_dotenv()
 
 elevenlabs = ElevenLabs(api_key=os.getenv("ELEVENLABS_API_KEY"))
+
+def createVoice(pathToAudio):
+    voice = elevenlabs.voices.ivc.create(
+        name="My Voice Clone",
+        # Replace with the paths to your audio files.
+        # The more files you add, the better the clone will be.
+        files=[BytesIO(open(pathToAudio, "rb").read())]
+    )
+    return voice.voice_id
 
 def track_loudness_deviation(audioPath, frame_length=512, hop_length=256):
     # Load audio
@@ -21,6 +32,7 @@ def track_loudness_deviation(audioPath, frame_length=512, hop_length=256):
     times = librosa.times_like(rms_db, sr=sr, hop_length=hop_length)
 
     result = []
+
     for time,db in zip(times,rms_db):
         result.append([float(time),float(db)])
 
@@ -46,8 +58,6 @@ def speechToText(audioSource):
             file=audioData,
             model_id="scribe_v2",
         )
-
-    
     
     # The transcription object contains both text and word-level timestamps
     result = {
@@ -65,6 +75,7 @@ def speechToText(audioSource):
     
     analysisWords = []
     timeStamps = []
+
     
     for word in result["words"]:
         time = word["end"] - word["start"]
@@ -103,14 +114,12 @@ def speechToText(audioSource):
         analysis = [word["word"],speed]
         
         analysisWords.append(analysis)
+        voice = createVoice(audioSource)
     
-    dbGraph = track_loudness_deviation()
+    dbGraph = track_loudness_deviation(audioSource)
     return {"Transcription": transcription.text,
             "Word Analysis": analysisWords,
             "Timestamps": timeStamps,
-            "Loudness": dbGraph
+            "Loudness": dbGraph,
+            "Voice": voice
             }
-
-
-
-
