@@ -26,10 +26,10 @@ To update the deps,
 pip freeze > requirements.txt
 ```
 
-Running the server,
+Running the server, do
 
 ```bash
-uvicorn app.main:app --reload
+make run
 ```
 
 Server is running at `http://127.0.0.1:8000`
