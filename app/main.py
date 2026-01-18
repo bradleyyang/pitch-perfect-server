@@ -1,4 +1,5 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 import tempfile
 import os
 from app.analysis import speech_to_text
@@ -7,6 +8,14 @@ from google.genai import types
 import json
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
