@@ -153,7 +153,7 @@ def summarize_speech_with_gemini(transcription_result: dict, filename: str) -> d
         MICRO-REWRITES (3 bullets): replacement sentences that instantly improve clarity/energy; keep them short and ready to paste into the script."""
 
     response = gemini_client.models.generate_content(
-        model="gemini-2.0-flash",
+        model="gemini-3-flash-preview",#"gemini-2.0-flash",
         contents=prompt
     )
 
