@@ -13,30 +13,12 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "https://pitch-perfect-cg8p3t7pt-bradley-yangs-projects.vercel.app"],
+    # allow_origins=["http://localhost:3000", "https://pitch-perfect-cg8p3t7pt-bradley-yangs-projects.vercel.app"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Dynamic CORS middleware for any Vercel frontend
-@app.middleware("http")
-async def vercel_cors(request: Request, call_next):
-    origin = request.headers.get("origin")
-    response = await call_next(request)
-
-    # Allow any Vercel deployment URL
-    if origin and origin.endswith(".vercel.app"):
-        response.headers["Access-Control-Allow-Origin"] = origin
-        response.headers["Access-Control-Allow-Methods"] = "GET,POST,OPTIONS"
-        response.headers["Access-Control-Allow-Headers"] = "Authorization,Content-Type"
-        response.headers["Access-Control-Allow-Credentials"] = "true"
-
-    # Handle preflight OPTIONS requests
-    if request.method == "OPTIONS":
-        response.status_code = 200
-
-    return response
 
 ALLOWED_AUDIO_TYPES = ["audio/mpeg", "audio/mp3", "audio/wav", "video/mp4"]
 ALLOWED_PDF_TYPES = ["application/pdf"]
