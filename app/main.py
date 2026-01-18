@@ -99,7 +99,7 @@ async def analyze_pdf(file: UploadFile = File(...)):
 @app.post("/api/evaluate/start")
 async def start_evaluation(
     background_tasks: BackgroundTasks,
-    target: str = Form(...),
+    target: Optional[str] = Form(None),
     context: str = Form(""),
     metadata: Optional[str] = Form(None),
     transcript: Optional[str] = Form(None),
@@ -133,8 +133,10 @@ async def start_evaluation(
             detail="At least one of `deck`, `media`, or `transcript` must be provided.",
         )
 
+    resolved_target = target or "general"
+
     job_payload = {
-        "target": target,
+        "target": resolved_target,
         "context": context,
         "metadata": parsed_metadata,
         "transcript": transcript,
@@ -143,7 +145,7 @@ async def start_evaluation(
         "media": media_info,
     }
 
-    create_job(job_id, target, job_payload)
+    create_job(job_id, resolved_target, job_payload)
     background_tasks.add_task(run_agent_workflow, job_id, job_payload)
 
     return {"jobId": job_id, "statusUrl": f"/api/evaluate/status/{job_id}"}

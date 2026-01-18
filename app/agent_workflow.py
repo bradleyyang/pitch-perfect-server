@@ -46,7 +46,7 @@ def _load_prompt(agent_name: str) -> str:
 def _parse_json_response(text: str) -> Any:
     cleaned = text.strip()
     if not cleaned:
-        raise ValueError("Empty response yielded no JSON.")
+        return {"raw_text": cleaned, "parse_error": "empty response"}
 
     try:
         return json.loads(cleaned)
@@ -58,7 +58,7 @@ def _parse_json_response(text: str) -> Any:
                 return json.loads(cleaned[start : end + 1])
             except json.JSONDecodeError:
                 pass
-    raise ValueError("Unable to parse JSON from agent response.")
+    return {"raw_text": cleaned, "parse_error": "Unable to parse JSON from agent response."}
 
 
 def _call_agent(agent_name: str, prompt_vars: Dict[str, Any]) -> Dict[str, Any]:
@@ -69,7 +69,13 @@ def _call_agent(agent_name: str, prompt_vars: Dict[str, Any]) -> Dict[str, Any]:
         contents=prompt_text,
     )
     parsed = _parse_json_response(response.text)
+    if not isinstance(parsed, dict):
+        parsed = {"raw_text": str(parsed)}
+        parsed_warnings = ["Agent returned non-dict response"]
+    else:
+        parsed_warnings = []
     validated, warnings = validate_agent_output(agent_name, parsed)
+    warnings = parsed_warnings + warnings
     return {"parsed": validated, "raw": response.text.strip(), "warnings": warnings}
 
 
