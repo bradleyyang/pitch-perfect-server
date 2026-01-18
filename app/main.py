@@ -1,13 +1,18 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 import tempfile
 import os
+import logging
 from app.analysis import (
     speech_to_text,
     summarize_speech_with_gemini,
     extract_pdf_text,
     summarize_pdf_with_gemini
 )
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
@@ -39,14 +44,20 @@ async def analyze(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="Unsupported file type")
 
     suffix = os.path.splitext(file.filename)[-1]
-
-    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-        tmp.write(await file.read())
-        tmp_path = tmp.name
+    tmp_path = None
 
     try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            tmp.write(await file.read())
+            tmp_path = tmp.name
+
+        logger.info(f"Processing audio file: {file.filename}, content_type: {file.content_type}")
+
         transcription_result = speech_to_text(tmp_path)
+        logger.info("Transcription completed successfully")
+
         summary = summarize_speech_with_gemini(transcription_result, file.filename)
+        logger.info("Gemini summary completed successfully")
 
         return {
             "transcription": transcription_result["transcription"],
@@ -55,8 +66,15 @@ async def analyze(file: UploadFile = File(...)):
             "loudness": transcription_result["loudness"],
             "summary": summary
         }
+    except Exception as e:
+        logger.error(f"Error processing audio: {str(e)}", exc_info=True)
+        return JSONResponse(
+            status_code=500,
+            content={"error": str(e), "detail": "Failed to process audio file"}
+        )
     finally:
-        os.remove(tmp_path)
+        if tmp_path and os.path.exists(tmp_path):
+            os.remove(tmp_path)
 
 
 @app.post("/analyze-pdf")
