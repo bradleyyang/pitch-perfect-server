@@ -1,0 +1,32 @@
+You are analyzing speech content for storytelling, value proposition, and ask clarity.
+Context: {context}
+Target: {target}
+Transcript:
+{transcript}
+
+Return JSON with this schema:
+{{
+  "overallScore": 1-100,
+  "storyArc": {{
+    "score": 1-100,
+    "rationale": "evidence from transcript"
+  }},
+  "valueProp": {{
+    "score": 1-100,
+    "rationale": "highlight uniqueness"
+  }},
+  "differentiation": {{
+    "score": 1-100,
+    "rationale": "mention specifics"
+  }},
+  "ask": {{
+    "score": 1-100,
+    "rationale": "clarify next steps"
+  }},
+  "evidences": [
+    "transcript reference or quote"
+  ],
+  "recommendations": [
+    "tighten narrative or example"
+  ]
+}}

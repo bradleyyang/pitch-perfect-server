@@ -1,0 +1,40 @@
+Assess the vocal persona for tone, cadence, confidence, clarity, articulation, vocabulary, and conviction.
+Context: {context}
+Target: {target}
+Transcript:
+{transcript}
+Audio Summary:
+{audio_summary}
+
+Return JSON matching:
+{{
+  "overallSummary": "sentence or two",
+  "tone": {{
+    "score": 1-100,
+    "rationale": "mention brightness or warmth"
+  }},
+  "cadence": {{
+    "score": 1-100,
+    "rationale": "note rhythm or speed"
+  }},
+  "confidence": {{
+    "score": 1-100,
+    "rationale": "mention assertiveness"
+  }},
+  "clarity": {{
+    "score": 1-100,
+    "rationale": "pronunciation focus"
+  }},
+  "articulation": {{
+    "score": 1-100,
+    "rationale": "mention crispness"
+  }},
+  "vocabulary": {{
+    "score": 1-100,
+    "rationale": "note precision"
+  }},
+  "conviction": {{
+    "score": 1-100,
+    "rationale": "sustain energy"
+  }}
+}}

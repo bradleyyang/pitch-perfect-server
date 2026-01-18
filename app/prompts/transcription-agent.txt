@@ -1,0 +1,33 @@
+Analyze the transcript accuracy, structure, relevance, and highlight risks/gaps.
+Context: {context}
+Target: {target}
+Transcript:
+{transcript}
+Audio Summary:
+{audio_summary}
+
+Provide JSON matching:
+{{
+  "overallScore": 1-100,
+  "clarity": {{
+    "score": 1-100,
+    "rationale": "mention precision"
+  }},
+  "relevance": {{
+    "score": 1-100,
+    "rationale": "tie to target"
+  }},
+  "structure": {{
+    "score": 1-100,
+    "rationale": "mention flow"
+  }},
+  "highlights": [
+    "quote or paraphrase"
+  ],
+  "risks": [
+    "missing context or signals"
+  ],
+  "recommendations": [
+    "clarify or reorganize content"
+  ]
+}}

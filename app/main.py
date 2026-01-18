@@ -1,19 +1,29 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Form, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 import tempfile
 import os
+import json
+from uuid import uuid4
+from typing import Optional
 from app.analysis import (
     speech_to_text,
     summarize_speech_with_gemini,
     extract_pdf_text,
     summarize_pdf_with_gemini
 )
+from app.job_store import (
+    create_job,
+    get_job,
+    get_result,
+    persist_upload,
+)
+from app.agent_workflow import run_agent_workflow
 
 app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["http://localhost:3001"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -84,3 +94,62 @@ async def analyze_pdf(file: UploadFile = File(...)):
         }
     finally:
         os.remove(tmp_path)
+
+
+@app.post("/api/evaluate/start")
+async def start_evaluation(
+    background_tasks: BackgroundTasks,
+    target: str = Form(...),
+    context: str = Form(""),
+    metadata: Optional[str] = Form(None),
+    transcript: Optional[str] = Form(None),
+    deck: Optional[UploadFile] = File(None),
+    media: Optional[UploadFile] = File(None),
+):
+    """
+    Kick off an evaluation job that orchestrates the multi-agent workflow.
+    """
+    job_id = str(uuid4())
+    parsed_metadata = {}
+    if metadata:
+        try:
+            parsed_metadata = json.loads(metadata)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Metadata must be valid JSON.")
+
+    deck_info = None
+    if deck:
+        deck_bytes = await deck.read()
+        deck_info = persist_upload(job_id, deck.filename, deck_bytes, deck.content_type)
+
+    media_info = None
+    if media:
+        media_bytes = await media.read()
+        media_info = persist_upload(job_id, media.filename, media_bytes, media.content_type)
+
+    job_payload = {
+        "target": target,
+        "context": context,
+        "metadata": parsed_metadata,
+        "transcript": transcript,
+        "deck": deck_info,
+        "media": media_info,
+    }
+
+    create_job(job_id, target, job_payload)
+    background_tasks.add_task(run_agent_workflow, job_id, job_payload)
+
+    return {"jobId": job_id, "statusUrl": f"/api/evaluate/status/{job_id}"}
+
+
+@app.get("/api/evaluate/status/{job_id}")
+def evaluation_status(job_id: str):
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found.")
+
+    result = get_result(job_id)
+    return {
+        "job": job,
+        "result": result,
+    }

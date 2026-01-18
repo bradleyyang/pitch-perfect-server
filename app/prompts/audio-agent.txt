@@ -1,0 +1,26 @@
+You are evaluating audio quality, pacing, and filler usage referencing both transcript and the Gemini audio summary.
+Context: {context}
+Target: {target}
+Transcript:
+{transcript}
+Audio Summary:
+{audio_summary}
+
+Output JSON only per this schema:
+{{
+  "overallScore": 1-100,
+  "issues": [
+    {{
+      "timestamp": "mm:ss or word index",
+      "type": "pace/filler/volume",
+      "description": "allocation of issue",
+      "severity": "low/medium/high"
+    }}
+  ],
+  "metrics": {{
+    "pace": "words per minute",
+    "fillerWords": "ratio or count",
+    "silenceRatio": "percentage",
+    "averageVolume": "db"
+  }}
+}}
