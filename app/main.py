@@ -25,7 +25,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-ALLOWED_AUDIO_TYPES = ["audio/mpeg", "audio/mp3", "audio/wav", "video/mp4"]
+ALLOWED_AUDIO_TYPES = ["audio/mpeg", "audio/mp3", "audio/wav", "video/mp4", "audio/webm", "video/webm"]
 ALLOWED_PDF_TYPES = ["application/pdf"]
 
 
