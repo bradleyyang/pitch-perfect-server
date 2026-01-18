@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import tempfile
@@ -9,6 +9,12 @@ from app.analysis import (
     summarize_speech_with_gemini,
     extract_pdf_text,
     summarize_pdf_with_gemini
+)
+from app.evaluation import (
+    InMemoryJobStore,
+    process_job,
+    persist_upload,
+    allocate_job_space,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -28,10 +34,53 @@ app.add_middleware(
 ALLOWED_AUDIO_TYPES = ["audio/mpeg", "audio/mp3", "audio/wav", "video/mp4", "audio/webm", "video/webm"]
 ALLOWED_PDF_TYPES = ["application/pdf"]
 
+job_store = InMemoryJobStore()
+
 
 @app.get("/")
 def health_check():
     return {"status": "ok"}
+
+
+@app.post("/api/evaluate/start")
+async def start_evaluation(
+    background_tasks: BackgroundTasks,
+    deck: UploadFile | None = File(default=None),
+    transcript: str | None = Form(default=None),
+    media: UploadFile | None = File(default=None),
+):
+    """Kick off simplified evaluation job. Uses in-memory job store (no persistence)."""
+    if not any([deck, transcript, media]):
+        raise HTTPException(status_code=400, detail="Provide at least one of deck, transcript, or media.")
+
+    job_id = job_store.create_job()
+    temp_dir = allocate_job_space(job_id)
+    job_store.attach_paths(job_id, {"temp_dir": temp_dir})
+
+    deck_path = None
+    media_path = None
+
+    if deck:
+        suffix = os.path.splitext(deck.filename or "")[-1] or ".pdf"
+        deck_bytes = await deck.read()
+        deck_path = persist_upload(deck_bytes, temp_dir, f"deck{suffix}")
+
+    if media:
+        suffix = os.path.splitext(media.filename or "")[-1] or ".media"
+        media_bytes = await media.read()
+        media_path = persist_upload(media_bytes, temp_dir, f"media{suffix}")
+
+    background_tasks.add_task(process_job, job_store, job_id, deck_path, transcript, media_path)
+    return {"jobId": job_id, "status": "pending"}
+
+
+@app.get("/api/evaluate/status/{job_id}")
+def get_status(job_id: str):
+    job = job_store.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    job.setdefault("jobId", job.get("id"))
+    return job
 
 
 @app.post("/analyze")

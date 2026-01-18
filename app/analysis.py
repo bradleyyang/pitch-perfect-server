@@ -47,7 +47,9 @@ def speech_to_text(audio_path: str):
         analysis_words.append({
             "word": word.text,
             "speed": speed,
-            "syllables_per_minute": round(spm, 2)
+            "syllables_per_minute": round(spm, 2),
+            "start": float(word.start) if hasattr(word, "start") else None,
+            "end": float(word.end) if hasattr(word, "end") else None,
         })
 
         timestamps.append([word.end, round(spm, 2)])
