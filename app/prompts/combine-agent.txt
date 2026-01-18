@@ -7,7 +7,7 @@ Audio Summary: {audio_summary}
 Previous agent outputs:
 {agents_json}
 
-Return JSON only with this shape:
+Return strictly valid JSON only; start with `{` and end with `}`, and do not include markdown, prose, or any text outside the JSON object. Omit footers/headings and keep each field inside the schema below.
 {{
   "summary": {{
     "overallScore": 1-100,
