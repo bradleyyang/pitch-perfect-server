@@ -1,5 +1,5 @@
 import base64
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -16,31 +16,32 @@ from app.analysis import (
     delete_cloned_voice,
     generate_improved_pitch
 )
+from slowapi.errors import RateLimitExceeded
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+
+limiter = Limiter(key_func=get_remote_address)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI()
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 ALLOWED_AUDIO_TYPES = ["audio/mpeg", "audio/mp3", "audio/wav", "video/mp4", "audio/webm", "video/webm"]
 ALLOWED_PDF_TYPES = ["application/pdf"]
 
 
 @app.get("/")
-def health_check():
+@limiter.limit("5/minute")
+def health_check(request: Request):
     return {"status": "ok"}
 
 
 @app.post("/analyze")
-async def analyze(file: UploadFile = File(...)):
+@limiter.limit("5/minute")
+async def analyze(file: UploadFile = File(...), request: Request):
     """
     Analyze audio/video pitch and return structured insights.
     Returns transcription, metrics, modular insights, and audio verdict.
@@ -92,7 +93,8 @@ class ImprovedPitchRequest(BaseModel):
 
 
 @app.post("/generate-improved-pitch")
-async def improved_pitch_endpoint(file: UploadFile = File(...), transcript: str = "", insights_json: str = "{}"):
+@limiter.limit("5/minute")
+async def improved_pitch_endpoint(file: UploadFile = File(...), transcript: str = "", insights_json: str = "{}", request: Request):
     """
     Generate improved pitch audio using the user's cloned voice.
     Requires original audio (for voice cloning), transcript, and insights.
@@ -142,7 +144,8 @@ async def improved_pitch_endpoint(file: UploadFile = File(...), transcript: str 
 
 
 @app.post("/analyze-pdf")
-async def analyze_pdf(file: UploadFile = File(...)):
+@limiter.limit("5/minute")
+async def analyze_pdf(file: UploadFile = File(...), request: Request):
     """
     Analyze PDF slidedeck and return structured insights.
     """
