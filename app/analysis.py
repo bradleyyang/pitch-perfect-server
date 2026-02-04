@@ -91,7 +91,30 @@ def track_loudness_deviation(audio_path: str, frame_length: int = 512, hop_lengt
     return [[float(time), float(db)] for time, db in zip(times, rms_db)]
 
 
-FILLER_WORDS = {"um", "uh", "like", "so", "actually", "you know", "basically", "literally"}
+FILLER_WORDS = {    "um",
+    "uh",
+    "uhh",
+    "uhm",
+    "erm",
+    "like",
+    "so",
+    "actually",
+    "you know",
+    "basically",
+    "literally",
+    "kinda",
+    "sorta",
+    "i mean",
+    "you see",
+    "right",
+    "okay",
+    "ok",
+    "well",
+    "just",
+    "stuff",
+    "things",
+    "maybe",
+}
 
 
 def summarize_speech_with_gemini(transcription_result: dict, filename: str) -> dict:
@@ -111,44 +134,26 @@ def summarize_speech_with_gemini(transcription_result: dict, filename: str) -> d
         "speed_distribution": speed_distribution
     }
 
-    prompt = f"""You are a direct, honest presentation coach. Analyze this pitch and respond ONLY with valid JSON (no markdown, no code blocks).
-
-Audio Stats: {json.dumps(audio_data)}
-Transcript: {transcript}
-
-Return this exact JSON structure:
-{{
-  "overall_verdict": "1-2 sentences. Be honest and direct about the pitch quality. Start with the most important observation.",
-  "clarity": {{
-    "score": 1-5,
-    "insight": "1 sentence on speech clarity",
-    "action": "1 specific action to improve"
-  }},
-  "pacing": {{
-    "score": 1-5,
-    "insight": "1 sentence on speaking pace",
-    "action": "1 specific action to improve"
-  }},
-  "filler_words": {{
-    "score": 1-5,
-    "count": {filler_count},
-    "insight": "1 sentence on filler word usage",
-    "action": "1 specific action to reduce fillers"
-  }},
-  "structure": {{
-    "score": 1-5,
-    "insight": "1 sentence on pitch structure/flow",
-    "action": "1 specific action to improve structure"
-  }},
-  "engagement": {{
-    "score": 1-5,
-    "insight": "1 sentence on audience engagement potential",
-    "action": "1 specific action to boost engagement"
-  }}
-}}"""
+    prompt = f"""
+        You are an expert, direct pitch coach. Respond with crisp sections (no code fences). Ground every point in the transcript and numbers below. Be specific and tactical.
+        
+        Audio Analysis Data (pace/fillers derived, do not re-infer):
+        {json.dumps(audio_data, indent=2)}
+        
+        Full Transcript:
+        {transcript}
+        
+        Return exactly these sections in plain text (no extra prose):
+        HEADLINE: one sentence that names the single biggest win and single biggest fix; include who benefits.
+        METRICS: pace buckets and filler count from Audio Analysis Data (do not restate the whole transcript).
+        STRENGTHS (3 bullets): each cites a short quote (<12 words) from the transcript and why it works (metric, proof, or clarity).
+        ISSUES (3 bullets): each cites the problematic phrase and ends with a concrete fix (e.g., "Replace X with Y" or "Pause 0.5s after claim Z").
+        ACTION PLAN (5 numbered items): prioritized; each includes owner (presenter or script), what to change, and expected impact (e.g., +clarity, +engagement).
+        RATINGS (1-5): clarity, pacing, filler control, structure, engagement – each with a 1-line justification that references transcript or metrics.
+        MICRO-REWRITES (3 bullets): replacement sentences that instantly improve clarity/energy; keep them short and ready to paste into the script."""
 
     response = gemini_client.models.generate_content(
-        model="gemini-2.0-flash",
+        model="gemini-3-flash-preview",#"gemini-2.0-flash",
         contents=prompt
     )
 
@@ -228,19 +233,23 @@ def summarize_pdf_with_gemini(pdf_content: dict, filename: str) -> str:
     ])
 
     prompt = f"""
-You are an expert presentation coach. Analyze this slide deck and provide:
-1. Overall summary of the presentation content and flow.
-2. Strengths of the slide deck (clarity, structure, visual hierarchy implied by text).
-3. Areas for improvement with specific suggestions per slide if needed.
-4. Ratings (1-5 scale) for: Content Quality, Structure/Flow, Clarity, Overall Effectiveness.
-5. Suggestions for how to deliver this presentation verbally.
-
-Slide Deck: {filename}
-Total Slides: {pdf_content['total_pages']}
-
-Content:
-{pages_text}
-"""
+        You are an expert presentation coach. Deliver detailed, actionable feedback for this startup pitch deck. Be specific; cite slide numbers; focus on what changes the outcome.
+        
+        Slide Deck: {filename}
+        Total Slides: {pdf_content['total_pages']}
+        
+        Content:
+        {pages_text}
+        
+        Respond with these sections (plain text, no code fences):
+        HEADLINE: the single highest-leverage improvement; include slide reference if applicable.
+        MISSING FUNDAMENTALS: problem, solution, traction, market, business model, moat, ask – explicitly note which are missing or weak.
+        TOP STRENGTHS (3 bullets): cite slide numbers; why it works (metric, clarity, proof).
+        TOP GAPS (3 bullets): cite slide numbers; include a concrete fix (rewrite/add/remove/reorder).
+        PER-SLIDE NOTES: for each slide, 1 short note only if critical (skip if nothing material).
+        ACTION PLAN (5 numbered items): prioritized; include owner ("deck text" or "presenter"), what to change, and expected impact (e.g., +credibility, +clarity, +conversion).
+        RATINGS (1-5): content quality, structure/flow, clarity, persuasiveness, visual clarity – each with a 1-line rationale tied to the deck.
+        DELIVERY TIPS: 3 bullets tailored to this deck's story (what to emphasize, pacing, proof ordering)."""
 
     response = gemini_client.models.generate_content(
         model="gemini-2.0-flash",
